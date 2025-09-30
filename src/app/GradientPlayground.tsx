@@ -241,11 +241,15 @@ export default function GradientPlayground() {
 
   function addStop(layerId: number) {
     setLayers((prev) =>
-      prev.map((L) =>
-        L.id === layerId
-          ? { ...L, stops: [...L.stops, { color: "#ffffff", pos: 50 }] }
-          : L
-      )
+      prev.map((L) => {
+        if (L.id === layerId) {
+          const newStops = [...L.stops, { color: "#ffffff", pos: 50 }];
+          // Focus the newly created stop
+          setSelectedStopIndex(newStops.length - 1);
+          return { ...L, stops: newStops };
+        }
+        return L;
+      })
     );
   }
 
@@ -454,12 +458,14 @@ export default function GradientPlayground() {
       const newPos = minPos + (percentage / 100) * range;
 
       // Add new stop at clicked position
-      addStop(layer.id);
-      // Update the new stop's position
-      setTimeout(() => {
-        const newStops = [...layer.stops, { color: "#ffffff", pos: newPos }];
-        updateLayer(layer.id, { stops: newStops });
-      }, 0);
+      const newStop = { color: "#ffffff", pos: newPos };
+      const newStops = [...layer.stops, newStop];
+      
+      // Update the layer with the new stop
+      updateLayer(layer.id, { stops: newStops });
+      
+      // Focus the newly created stop
+      setSelectedStopIndex(newStops.length - 1);
     };
 
     const handleStopDrag = (
