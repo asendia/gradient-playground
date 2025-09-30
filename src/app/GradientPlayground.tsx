@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // Type definitions
 interface GradientStop {
@@ -62,8 +62,8 @@ const DEFAULT_LAYERS: GradientLayer[] = [
   },
 ];
 
-// URL state management functions
-function encodeStateToUrl(state: AppState): string {
+// Hash-based state management functions
+function encodeStateToHash(state: AppState): string {
   try {
     const compressed = JSON.stringify(state);
     return btoa(compressed);
@@ -73,14 +73,14 @@ function encodeStateToUrl(state: AppState): string {
   }
 }
 
-function decodeStateFromUrl(): AppState | null {
+function decodeStateFromHash(hash?: string): AppState | null {
   try {
-    if (typeof window === "undefined") return null;
+    const hashValue = hash || window.location.hash;
+    // Remove the # from the hash
+    const stateParam = hashValue.replace('#', '');
+    if (!stateParam) return null;
 
-    const hash = window.location.hash.slice(1); // Remove #
-    if (!hash) return null;
-
-    const decoded = atob(hash);
+    const decoded = atob(stateParam);
     const state = JSON.parse(decoded) as AppState;
 
     // Validate the state structure
@@ -96,27 +96,13 @@ function decodeStateFromUrl(): AppState | null {
 
     return state;
   } catch (e) {
-    console.error("Failed to decode state from URL:", e);
+    console.error("Failed to decode state from hash:", e);
     return null;
   }
 }
 
-function updateUrlWithState(state: AppState) {
-  try {
-    if (typeof window === "undefined") return;
-
-    const encoded = encodeStateToUrl(state);
-    const newUrl = `${window.location.pathname}${window.location.search}#${encoded}`;
-
-    // Use replaceState to avoid adding to browser history for every change
-    window.history.replaceState(null, "", newUrl);
-  } catch (e) {
-    console.error("Failed to update URL:", e);
-  }
-}
-
 export default function GradientPlayground() {
-  // Initialize state from URL or defaults (only on first load)
+  // Initialize state from hash or defaults (only on first load)
   const [isInitialized, setIsInitialized] = useState(false);
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [previewW, setPreviewW] = useState(300);
@@ -127,22 +113,76 @@ export default function GradientPlayground() {
   const [selectedStopIndex, setSelectedStopIndex] = useState(0);
   const [isDraggingStop, setIsDraggingStop] = useState(false);
   const [previewContainerHeight, setPreviewContainerHeight] = useState(0);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isUpdatingFromHashRef = useRef(false);
   
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
-  // Initialize from URL on first load only
+  // Initialize from hash on first load only
   useEffect(() => {
     if (isInitialized) return;
 
-    const urlState = decodeStateFromUrl();
-    if (urlState) {
-      setLayers(urlState.layers);
-      setPreviewW(urlState.previewW);
-      setPreviewH(urlState.previewH);
-      setSelectedLayerId(urlState.selectedLayerId);
+    const hashState = decodeStateFromHash();
+    if (hashState) {
+      setLayers(hashState.layers);
+      setPreviewW(hashState.previewW);
+      setPreviewH(hashState.previewH);
+      setSelectedLayerId(hashState.selectedLayerId);
     }
     setIsInitialized(true);
   }, [isInitialized]);
+
+  // Listen for hash changes (for browser back/forward navigation)
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const handleHashChange = () => {
+      const hashState = decodeStateFromHash();
+      if (hashState) {
+        // Set flag to prevent hash update loop
+        isUpdatingFromHashRef.current = true;
+        
+        // Update state to match hash without triggering another hash update
+        setLayers(hashState.layers);
+        setPreviewW(hashState.previewW);
+        setPreviewH(hashState.previewH);
+        setSelectedLayerId(hashState.selectedLayerId);
+        
+        // Reset flag after state updates
+        setTimeout(() => {
+          isUpdatingFromHashRef.current = false;
+        }, 0);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, [isInitialized]);
+
+  // Function to update hash with current state (debounced)
+  const updateHashWithState = useCallback((state: AppState) => {
+    try {
+      // Clear existing timeout
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      
+      // Debounce hash updates to prevent too many history entries
+      updateTimeoutRef.current = setTimeout(() => {
+        const encoded = encodeStateToHash(state);
+        
+        // Use history.pushState to create history entries for undo/redo
+        // This allows back/forward navigation while keeping the hash
+        const newUrl = `${window.location.pathname}${window.location.search}#${encoded}`;
+        history.pushState(null, '', newUrl);
+      }, 300); // 300ms debounce for better responsiveness
+    } catch (e) {
+      console.error("Failed to update hash:", e);
+    }
+  }, []);
 
   // Update CSS when state changes
   useEffect(() => {
@@ -152,9 +192,9 @@ export default function GradientPlayground() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layers, previewW, previewH, isInitialized]);
 
-  // Update URL when state changes (but not during initial load)
+  // Update hash when state changes (but not during initial load or hash updates)
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || isUpdatingFromHashRef.current) return;
 
     const state: AppState = {
       layers,
@@ -163,8 +203,8 @@ export default function GradientPlayground() {
       selectedLayerId,
     };
 
-    updateUrlWithState(state);
-  }, [layers, previewW, previewH, selectedLayerId, isInitialized]);
+    updateHashWithState(state);
+  }, [layers, previewW, previewH, selectedLayerId, isInitialized, updateHashWithState]);
 
   // Measure preview container height
   useEffect(() => {
@@ -180,8 +220,63 @@ export default function GradientPlayground() {
 
     return () => {
       window.removeEventListener('resize', measureHeight);
+      // Cleanup timeout on unmount
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
     };
   }, [previewW, previewH]);
+
+  // Handle keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for undo/redo shortcuts
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      
+      if (isMac) {
+        // Mac: Cmd+Z for undo, Cmd+Shift+Z for redo
+        if (e.metaKey && e.key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            window.history.forward();
+          } else {
+            window.history.back();
+          }
+        }
+        // Mac: Cmd+← for back, Cmd+→ for forward
+        else if (e.metaKey && e.key === 'ArrowLeft') {
+          e.preventDefault();
+          window.history.back();
+        }
+        else if (e.metaKey && e.key === 'ArrowRight') {
+          e.preventDefault();
+          window.history.forward();
+        }
+      } else {
+        // Windows/Linux: Ctrl+Z for undo, Ctrl+Y for redo
+        if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          window.history.back();
+        }
+        else if (e.ctrlKey && e.key === 'y') {
+          e.preventDefault();
+          window.history.forward();
+        }
+        // Windows/Linux: Alt+← for back, Alt+→ for forward
+        else if (e.altKey && e.key === 'ArrowLeft') {
+          e.preventDefault();
+          window.history.back();
+        }
+        else if (e.altKey && e.key === 'ArrowRight') {
+          e.preventDefault();
+          window.history.forward();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   function generateCss() {
     // Generate each layer CSS
@@ -351,7 +446,7 @@ export default function GradientPlayground() {
           }
         }
 
-        stops.push({ color, pos });
+        stops.push({ color, pos }, );
         currentPos = pos + 45; // Default increment for next stop if no position specified
       }
 
@@ -560,6 +655,9 @@ export default function GradientPlayground() {
             <h1 className="text-lg font-semibold text-gray-900">
               CSS Gradient Playground
             </h1>
+            <div className="text-xs text-gray-500 hidden sm:block">
+              Undo/Redo: Cmd+Z/Cmd+Shift+Z (Mac) or Ctrl+Z/Ctrl+Y (Windows) • Browser back/forward also works
+            </div>
             <div className="flex items-center gap-2">
               <button
                 className="px-3 py-1.5 text-sm bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 cursor-pointer"
