@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // Type definitions
 interface GradientStop {
@@ -125,6 +125,10 @@ export default function GradientPlayground() {
   const [cssText, setCssText] = useState("");
   const [tailwindText, setTailwindText] = useState("");
   const [selectedStopIndex, setSelectedStopIndex] = useState(0);
+  const [isDraggingStop, setIsDraggingStop] = useState(false);
+  const [previewContainerHeight, setPreviewContainerHeight] = useState(0);
+  
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Initialize from URL on first load only
   useEffect(() => {
@@ -161,6 +165,23 @@ export default function GradientPlayground() {
 
     updateUrlWithState(state);
   }, [layers, previewW, previewH, selectedLayerId, isInitialized]);
+
+  // Measure preview container height
+  useEffect(() => {
+    const measureHeight = () => {
+      if (previewContainerRef.current) {
+        const height = previewContainerRef.current.getBoundingClientRect().height;
+        setPreviewContainerHeight(height);
+      }
+    };
+
+    measureHeight();
+    window.addEventListener('resize', measureHeight);
+
+    return () => {
+      window.removeEventListener('resize', measureHeight);
+    };
+  }, [previewW, previewH]);
 
   function generateCss() {
     // Generate each layer CSS
@@ -447,6 +468,7 @@ export default function GradientPlayground() {
     ) => {
       e.preventDefault();
       e.stopPropagation();
+      setIsDraggingStop(true);
 
       const startX = e.clientX;
       const barRect = e.currentTarget.parentElement!.getBoundingClientRect();
@@ -462,6 +484,7 @@ export default function GradientPlayground() {
       };
 
       const handleMouseUp = () => {
+        setIsDraggingStop(false);
         document.removeEventListener("mousemove", handleMouseMove);
         document.removeEventListener("mouseup", handleMouseUp);
       };
@@ -563,9 +586,9 @@ export default function GradientPlayground() {
         </div>
       </div>
 
-      <div className="px-4 pt-4 pb-[calc(100dvh-430px)] max-w-7xl mx-auto">
+      <div className="px-4 pt-4 max-w-7xl mx-auto">
         {/* Sticky Preview Section */}
-        <div className="bg-white rounded-lg shadow sticky top-0 z-50 mb-4">
+        <div ref={previewContainerRef} className="bg-white rounded-lg shadow sticky top-0 z-50 mb-4">
           <div className="p-3">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-medium text-gray-700">Preview</h2>
@@ -593,9 +616,61 @@ export default function GradientPlayground() {
               </div>
             </div>
 
-            <div className="bg-gray-100 p-3 rounded-lg">
+            <div className="bg-gray-100 p-3 rounded-lg relative min-h-72 flex items-center justify-center">
+              {/* Large gradient overlay when dragging stops */}
+              {isDraggingStop && (
+                <div 
+                  className="absolute inset-0 pointer-events-none z-10 rounded-lg"
+                  style={{
+                    background: layers
+                      .filter((L) => L.enabled)
+                      .map((L) => {
+                        const fromPart =
+                          L.from != null ? `from ${L.from}deg ` : "";
+                        
+                        // Calculate the overlay container dimensions (full container minus padding)
+                        const overlayContainer = document.querySelector('.bg-gray-100.p-3.rounded-lg');
+                        
+                        let atPart = "at 50% 50%"; // fallback
+                        
+                        if (overlayContainer && L.at) {
+                          const overlayRect = overlayContainer.getBoundingClientRect();
+                          
+                          const overlayWidth = overlayRect.width;
+                          const overlayHeight = overlayRect.height;
+                          
+                          // Calculate the relative position of the gradient center
+                          // The preview is centered within the overlay container
+                          const previewX = (overlayWidth - previewW) / 2;
+                          const previewY = (overlayHeight - previewH) / 2;
+                          
+                          // Calculate where the gradient center should be in overlay coordinates
+                          const gradientCenterX = previewX + (L.at.x / 100) * previewW;
+                          const gradientCenterY = previewY + (L.at.y / 100) * previewH;
+                          
+                          // Convert to percentages of the overlay container
+                          const overlayAtX = (gradientCenterX / overlayWidth) * 100;
+                          const overlayAtY = (gradientCenterY / overlayHeight) * 100;
+                          
+                          atPart = `at ${overlayAtX.toFixed(2)}% ${overlayAtY.toFixed(2)}%`;
+                        } else if (L.at) {
+                          // Fallback: use the original at position if we can't calculate
+                          atPart = `at ${L.at.x}% ${L.at.y}%`;
+                        }
+                        
+                        const stopList = L.stops
+                          .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
+                          .join(", ");
+                        return `${L.type}-gradient(${fromPart}${atPart}, ${stopList})`;
+                      })
+                      .join(", "),
+                    opacity: 0.7,
+                  }}
+                />
+              )}
+              
               <div
-                className="mx-auto rounded-lg shadow-inner border border-gray-200 overflow-hidden"
+                className="rounded-lg shadow-inner border border-gray-200 overflow-hidden relative z-20"
                 style={{ width: previewW, height: previewH }}
               >
                 <div
@@ -621,7 +696,14 @@ export default function GradientPlayground() {
         </div>
 
         {/* Main Content - Single Column */}
-        <div className="space-y-4">
+        <div 
+          className="space-y-4"
+          style={{
+            paddingBottom: previewContainerHeight > 0 
+              ? `calc(100dvh - ${previewContainerHeight + 170}px)` 
+              : '0px'
+          }}
+        >
           {/* Import & Export Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Import */}
