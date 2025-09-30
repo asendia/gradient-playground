@@ -18,6 +18,13 @@ interface GradientLayer {
   opacity: number;
 }
 
+interface AppState {
+  layers: GradientLayer[];
+  previewW: number;
+  previewH: number;
+  selectedLayerId: number;
+}
+
 // Default gradient layers parsed from the user's example (kept as structured data)
 const DEFAULT_LAYERS: GradientLayer[] = [
   {
@@ -55,19 +62,135 @@ const DEFAULT_LAYERS: GradientLayer[] = [
   },
 ];
 
+// URL state management functions
+function encodeStateToUrl(state: AppState): string {
+  try {
+    const compressed = JSON.stringify(state);
+    return btoa(compressed);
+  } catch (e) {
+    console.error('Failed to encode state:', e);
+    return '';
+  }
+}
+
+function decodeStateFromUrl(): AppState | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    
+    const hash = window.location.hash.slice(1); // Remove #
+    if (!hash) return null;
+    
+    const decoded = atob(hash);
+    const state = JSON.parse(decoded) as AppState;
+    
+    // Validate the state structure
+    if (!state.layers || !Array.isArray(state.layers) || 
+        typeof state.previewW !== 'number' || 
+        typeof state.previewH !== 'number' ||
+        typeof state.selectedLayerId !== 'number') {
+      return null;
+    }
+    
+    return state;
+  } catch (e) {
+    console.error('Failed to decode state from URL:', e);
+    return null;
+  }
+}
+
+function updateUrlWithState(state: AppState) {
+  try {
+    if (typeof window === 'undefined') return;
+    
+    const encoded = encodeStateToUrl(state);
+    const newUrl = `${window.location.pathname}${window.location.search}#${encoded}`;
+    
+    // Use replaceState to avoid adding to browser history for every change
+    window.history.replaceState(null, '', newUrl);
+  } catch (e) {
+    console.error('Failed to update URL:', e);
+  }
+}
+
 export default function GradientPlayground() {
+  // Initialize state from URL or defaults (only on first load)
+  const [isInitialized, setIsInitialized] = useState(false);
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [previewW, setPreviewW] = useState(300);
   const [previewH, setPreviewH] = useState(180);
-  const [selectedLayerId, setSelectedLayerId] = useState(layers[0].id);
+  const [selectedLayerId, setSelectedLayerId] = useState(1);
   const [cssText, setCssText] = useState("");
   const [tailwindText, setTailwindText] = useState("");
 
+  // Initialize from URL on first load only
   useEffect(() => {
+    if (isInitialized) return;
+    
+    const urlState = decodeStateFromUrl();
+    if (urlState) {
+      setLayers(urlState.layers);
+      setPreviewW(urlState.previewW);
+      setPreviewH(urlState.previewH);
+      setSelectedLayerId(urlState.selectedLayerId);
+    }
+    setIsInitialized(true);
+  }, [isInitialized]);
+
+  // Update CSS when state changes
+  useEffect(() => {
+    if (!isInitialized) return;
     setCssText(generateCss());
     setTailwindText(generateTailwindCss());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layers, previewW, previewH]);
+  }, [layers, previewW, previewH, isInitialized]);
+
+  // Update URL when state changes (but not during initial load)
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const state: AppState = {
+      layers,
+      previewW,
+      previewH,
+      selectedLayerId
+    };
+    
+    updateUrlWithState(state);
+  }, [layers, previewW, previewH, selectedLayerId, isInitialized]);
+
+  function generateCss() {
+    // Generate each layer CSS
+    const layerCss = layers
+      .filter((L) => L.enabled)
+      .map((L) => {
+        const fromPart = L.from != null ? `from ${L.from}deg ` : "";
+        const atPart = L.at ? `at ${L.at.x}% ${L.at.y}%` : "";
+        const stopList = L.stops
+          .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
+          .join(", ");
+        return `${L.type}-gradient(${fromPart}${atPart}, ${stopList})`;
+      })
+      .join(",\n");
+
+    return `background: ${layerCss};`;
+  }
+
+  function generateTailwindCss() {
+    // Generate Tailwind CSS class
+    const layerCss = layers
+      .filter((L) => L.enabled)
+      .map((L) => {
+        const fromPart = L.from != null ? `from_${L.from}deg_` : "";
+        const atPart = L.at ? `at_${L.at.x}%_${L.at.y}%` : "";
+        const stopList = L.stops
+          .map((s) => `${s.color}_${formatNumber(s.pos)}deg`)
+          .join(",_");
+        return `${L.type}-gradient(${fromPart}${atPart},_${stopList})`;
+      })
+      .join(",");
+
+    return `bg-[${layerCss}]`;
+  }
 
   function updateLayer(id: number, patch: Partial<GradientLayer>) {
     setLayers((prev) => prev.map((L) => (L.id === id ? { ...L, ...patch } : L)));
@@ -112,42 +235,14 @@ export default function GradientPlayground() {
 
   function removeLayer(id: number) {
     if (layers.length === 1) return;
-    setLayers((prev) => prev.filter((l) => l.id !== id));
-    if (selectedLayerId === id) setSelectedLayerId(layers[0].id);
-  }
-
-  function generateCss() {
-    // Generate each layer CSS
-    const layerCss = layers
-      .filter((L) => L.enabled)
-      .map((L) => {
-        const fromPart = L.from != null ? `from ${L.from}deg ` : "";
-        const atPart = L.at ? `at ${L.at.x}% ${L.at.y}%` : "";
-        const stopList = L.stops
-          .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
-          .join(", ");
-        return `${L.type}-gradient(${fromPart}${atPart}, ${stopList})`;
-      })
-      .join(",\n");
-
-    return `background: ${layerCss};`;
-  }
-
-  function generateTailwindCss() {
-    // Generate Tailwind CSS class
-    const layerCss = layers
-      .filter((L) => L.enabled)
-      .map((L) => {
-        const fromPart = L.from != null ? `from_${L.from}deg_` : "";
-        const atPart = L.at ? `at_${L.at.x}%_${L.at.y}%` : "";
-        const stopList = L.stops
-          .map((s) => `${s.color}_${formatNumber(s.pos)}deg`)
-          .join(",_");
-        return `${L.type}-gradient(${fromPart}${atPart},_${stopList})`;
-      })
-      .join(",");
-
-    return `bg-[${layerCss}]`;
+    
+    const newLayers = layers.filter((l) => l.id !== id);
+    setLayers(newLayers);
+    
+    // If the removed layer was selected, select the first remaining layer
+    if (selectedLayerId === id) {
+      setSelectedLayerId(newLayers[0].id);
+    }
   }
 
   function formatNumber(n: number | null | undefined): string {
@@ -290,9 +385,27 @@ export default function GradientPlayground() {
             className="px-2 py-1 rounded-md border mr-2 text-sm"
             onClick={() => {
               setLayers(DEFAULT_LAYERS);
+              setPreviewW(300);
+              setPreviewH(180);
+              setSelectedLayerId(DEFAULT_LAYERS[0].id);
             }}
           >
             Reset example
+          </button>
+          <button
+            className="px-2 py-1 rounded-md border mr-2 text-sm"
+            onClick={async () => {
+              try {
+                const url = window.location.href;
+                await navigator.clipboard.writeText(url);
+                alert("Share URL copied to clipboard!");
+              } catch (e) {
+                console.error(e);
+                alert("Failed to copy URL");
+              }
+            }}
+          >
+            Share
           </button>
           <button className="px-2 py-1 rounded-md bg-slate-800 text-white text-sm" onClick={addLayer}>
             + Add layer
