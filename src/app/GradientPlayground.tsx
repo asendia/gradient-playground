@@ -25,6 +25,79 @@ interface AppState {
   selectedLayerId: number;
 }
 
+// Helper function to convert hex/rgb/rgba colors to rgba with specified opacity
+function convertToRgba(color: string, opacity: number): string {
+  // If already rgba, extract rgb part and apply new opacity
+  const rgbaMatch = color.match(/rgba?\(([^)]+)\)/);
+  if (rgbaMatch) {
+    const values = rgbaMatch[1].split(',').map(v => v.trim());
+    if (values.length >= 3) {
+      const r = values[0];
+      const g = values[1]; 
+      const b = values[2];
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+  }
+  
+  // Handle hex colors
+  if (color.startsWith('#')) {
+    const hex = color.slice(1);
+    let r: number, g: number, b: number;
+    
+    if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16);
+      g = parseInt(hex[1] + hex[1], 16);
+      b = parseInt(hex[2] + hex[2], 16);
+    } else if (hex.length === 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return color; // fallback for invalid hex
+    }
+    
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  }
+  
+  // For other color formats, return as-is (fallback)
+  return color;
+}
+
+// Helper function to convert any color format to hex for color picker
+function colorToHex(color: string): string {
+  // If already hex, return as-is
+  if (color.startsWith('#')) {
+    return color;
+  }
+  
+  // Handle rgba/rgb colors
+  const rgbaMatch = color.match(/rgba?\(([^)]+)\)/);
+  if (rgbaMatch) {
+    const values = rgbaMatch[1].split(',').map(v => parseInt(v.trim()));
+    if (values.length >= 3) {
+      const r = Math.max(0, Math.min(255, values[0]));
+      const g = Math.max(0, Math.min(255, values[1])); 
+      const b = Math.max(0, Math.min(255, values[2]));
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+  }
+  
+  // Fallback: return black
+  return '#000000';
+}
+
+// Helper function to extract alpha from rgba color
+function getColorAlpha(color: string): number {
+  const rgbaMatch = color.match(/rgba\(([^)]+)\)/);
+  if (rgbaMatch) {
+    const values = rgbaMatch[1].split(',').map(v => v.trim());
+    if (values.length >= 4) {
+      return parseFloat(values[3]) || 1;
+    }
+  }
+  return 1; // Default to fully opaque
+}
+
 // Default gradient layers parsed from the user's example (kept as structured data)
 const DEFAULT_LAYERS: GradientLayer[] = [
   {
@@ -279,15 +352,24 @@ export default function GradientPlayground() {
   }, []);
 
   function generateCss() {
-    // Generate each layer CSS
+    // Generate each layer CSS with opacity support
     const layerCss = layers
       .filter((L) => L.enabled)
       .map((L) => {
         const fromPart = L.from != null ? `from ${L.from}deg ` : "";
         const atPart = L.at ? `at ${L.at.x}% ${L.at.y}%` : "";
+        
+        // Convert colors to rgba if opacity is less than 1
         const stopList = L.stops
-          .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
+          .map((s) => {
+            if (L.opacity < 1) {
+              const color = convertToRgba(s.color, L.opacity);
+              return `${color} ${formatNumber(s.pos)}deg`;
+            }
+            return `${s.color} ${formatNumber(s.pos)}deg`;
+          })
           .join(", ");
+        
         return `${L.type}-gradient(${fromPart}${atPart}, ${stopList})`;
       })
       .join(",\n");
@@ -296,14 +378,24 @@ export default function GradientPlayground() {
   }
 
   function generateTailwindCss() {
-    // Generate Tailwind CSS class
+    // Generate Tailwind CSS class with opacity support
     const layerCss = layers
       .filter((L) => L.enabled)
       .map((L) => {
         const fromPart = L.from != null ? `from_${L.from}deg_` : "";
         const atPart = L.at ? `at_${L.at.x}%_${L.at.y}%` : "";
+        
+        // Convert colors to rgba if opacity is less than 1
         const stopList = L.stops
-          .map((s) => `${s.color}_${formatNumber(s.pos)}deg`)
+          .map((s) => {
+            if (L.opacity < 1) {
+              const color = convertToRgba(s.color, L.opacity);
+              // Escape special characters for Tailwind
+              const escapedColor = color.replace(/[(),\s]/g, '_');
+              return `${escapedColor}_${formatNumber(s.pos)}deg`;
+            }
+            return `${s.color}_${formatNumber(s.pos)}deg`;
+          })
           .join(",_");
         return `${L.type}-gradient(${fromPart}${atPart},_${stopList})`;
       })
@@ -388,6 +480,28 @@ export default function GradientPlayground() {
     if (selectedLayerId === id) {
       setSelectedLayerId(newLayers[0].id);
     }
+  }
+
+  function moveLayerUp(id: number) {
+    const currentIndex = layers.findIndex(l => l.id === id);
+    if (currentIndex <= 0) return; // Already at top or not found
+    
+    const newLayers = [...layers];
+    const temp = newLayers[currentIndex];
+    newLayers[currentIndex] = newLayers[currentIndex - 1];
+    newLayers[currentIndex - 1] = temp;
+    setLayers(newLayers);
+  }
+
+  function moveLayerDown(id: number) {
+    const currentIndex = layers.findIndex(l => l.id === id);
+    if (currentIndex >= layers.length - 1 || currentIndex === -1) return; // Already at bottom or not found
+    
+    const newLayers = [...layers];
+    const temp = newLayers[currentIndex];
+    newLayers[currentIndex] = newLayers[currentIndex + 1];
+    newLayers[currentIndex + 1] = temp;
+    setLayers(newLayers);
   }
 
   function formatNumber(n: number | null | undefined): string {
@@ -569,6 +683,7 @@ export default function GradientPlayground() {
     ) => {
       e.preventDefault();
       e.stopPropagation();
+      setSelectedStopIndex(index);
       setIsDraggingStop(true);
 
       const startX = e.clientX;
@@ -608,7 +723,13 @@ export default function GradientPlayground() {
             }${
               layer.at ? `at ${layer.at.x}% ${layer.at.y}%` : ""
             }, ${sortedStops
-              .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
+              .map((s) => {
+                if (layer.opacity < 1) {
+                  const color = convertToRgba(s.color, layer.opacity);
+                  return `${color} ${formatNumber(s.pos)}deg`;
+                }
+                return `${s.color} ${formatNumber(s.pos)}deg`;
+              })
               .join(", ")})`,
           }}
         />
@@ -621,10 +742,6 @@ export default function GradientPlayground() {
               key={index}
               className="absolute top-0 h-full w-3 cursor-grab active:cursor-grabbing transform -translate-x-1/2 group z-10"
               style={{ left: `${Math.max(6, Math.min(94, percentage))}%` }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedStopIndex(index);
-              }}
               onMouseDown={(e) => handleStopDrag(index, e)}
             >
               <div
@@ -763,7 +880,13 @@ export default function GradientPlayground() {
                         }
                         
                         const stopList = L.stops
-                          .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
+                          .map((s) => {
+                            if (L.opacity < 1) {
+                              const color = convertToRgba(s.color, L.opacity);
+                              return `${color} ${formatNumber(s.pos)}deg`;
+                            }
+                            return `${s.color} ${formatNumber(s.pos)}deg`;
+                          })
                           .join(", ");
                         return `${L.type}-gradient(${fromPart}${atPart}, ${stopList})`;
                       })
@@ -787,7 +910,13 @@ export default function GradientPlayground() {
                           L.from != null ? `from ${L.from}deg ` : "";
                         const atPart = L.at ? `at ${L.at.x}% ${L.at.y}%` : "";
                         const stopList = L.stops
-                          .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
+                          .map((s) => {
+                            if (L.opacity < 1) {
+                              const color = convertToRgba(s.color, L.opacity);
+                              return `${color} ${formatNumber(s.pos)}deg`;
+                            }
+                            return `${s.color} ${formatNumber(s.pos)}deg`;
+                          })
                           .join(", ");
                         return `${L.type}-gradient(${fromPart}${atPart}, ${stopList})`;
                       })
@@ -927,7 +1056,7 @@ export default function GradientPlayground() {
               </div>
             </div>
             <div className="p-3 space-y-2">
-              {layers.map((layer) => (
+              {layers.map((layer, index) => (
                 <div
                   key={layer.id}
                   className={`flex items-center gap-3 p-2 rounded border cursor-pointer transition-colors ${
@@ -954,7 +1083,13 @@ export default function GradientPlayground() {
                       }${
                         layer.at ? `at ${layer.at.x}% ${layer.at.y}%` : ""
                       }, ${layer.stops
-                        .map((s) => `${s.color} ${formatNumber(s.pos)}deg`)
+                        .map((s) => {
+                          if (layer.opacity < 1) {
+                            const color = convertToRgba(s.color, layer.opacity);
+                            return `${color} ${formatNumber(s.pos)}deg`;
+                          }
+                          return `${s.color} ${formatNumber(s.pos)}deg`;
+                        })
                         .join(", ")})`,
                     }}
                   />
@@ -964,30 +1099,95 @@ export default function GradientPlayground() {
                       Gradient
                     </div>
                     <div className="text-xs text-gray-500">
-                      {layer.stops.length} stops
+                      {layer.stops.length} stops • {Math.round(layer.opacity * 100)}% opacity
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeLayer(layer.id);
-                    }}
-                    className="p-1 text-gray-400 hover:text-red-500 cursor-pointer"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  
+                  {/* Layer Controls */}
+                  <div className="flex items-center gap-1">
+                    {/* Opacity Control */}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={layer.opacity}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          updateLayer(layer.id, { opacity: parseFloat(e.target.value) });
+                        }}
+                        className="w-12 h-1"
+                        title={`Opacity: ${Math.round(layer.opacity * 100)}%`}
                       />
-                    </svg>
-                  </button>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={Math.round(layer.opacity * 100)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          const value = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                          updateLayer(layer.id, { opacity: value / 100 });
+                        }}
+                        className="w-12 px-1 py-0.5 text-xs border border-gray-300 rounded"
+                        title="Opacity percentage"
+                      />
+                      <span className="text-xs text-gray-500">%</span>
+                    </div>
+                    
+                    {/* Reorder Buttons */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveLayerUp(layer.id);
+                      }}
+                      disabled={index === 0}
+                      className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move up"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveLayerDown(layer.id);
+                      }}
+                      disabled={index === layers.length - 1}
+                      className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move down"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeLayer(layer.id);
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-500 cursor-pointer"
+                      title="Delete layer"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1007,7 +1207,7 @@ export default function GradientPlayground() {
 
               <div className="p-3 space-y-4">
                 {/* Gradient Controls */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Type
@@ -1077,6 +1277,23 @@ export default function GradientPlayground() {
                       className="w-full p-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Opacity (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={Math.round(selectedLayer.opacity * 100)}
+                      onChange={(e) =>
+                        updateLayer(selectedLayer.id, {
+                          opacity: Math.max(0, Math.min(100, Number(e.target.value))) / 100,
+                        })
+                      }
+                      className="w-full p-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
 
                 {/* Full-Width Gradient Bar */}
@@ -1106,27 +1323,96 @@ export default function GradientPlayground() {
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           Color
                         </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="color"
-                            value={selectedLayer.stops[selectedStopIndex].color}
-                            onChange={(e) =>
-                              updateStop(selectedLayer.id, selectedStopIndex, {
-                                color: e.target.value,
-                              })
-                            }
-                            className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
-                          />
-                          <input
-                            type="text"
-                            value={selectedLayer.stops[selectedStopIndex].color}
-                            onChange={(e) =>
-                              updateStop(selectedLayer.id, selectedStopIndex, {
-                                color: e.target.value,
-                              })
-                            }
-                            className="flex-1 p-1.5 border border-gray-300 rounded text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="color"
+                              value={colorToHex(selectedLayer.stops[selectedStopIndex].color)}
+                              onChange={(e) => {
+                                const currentColor = selectedLayer.stops[selectedStopIndex].color;
+                                const alpha = getColorAlpha(currentColor);
+                                
+                                // If alpha is less than 1, convert to rgba
+                                if (alpha < 1) {
+                                  const hex = e.target.value;
+                                  const r = parseInt(hex.slice(1, 3), 16);
+                                  const g = parseInt(hex.slice(3, 5), 16);
+                                  const b = parseInt(hex.slice(5, 7), 16);
+                                  const newColor = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                                  updateStop(selectedLayer.id, selectedStopIndex, {
+                                    color: newColor,
+                                  });
+                                } else {
+                                  updateStop(selectedLayer.id, selectedStopIndex, {
+                                    color: e.target.value,
+                                  });
+                                }
+                              }}
+                              className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                            />
+                            <input
+                              type="text"
+                              value={selectedLayer.stops[selectedStopIndex].color}
+                              onChange={(e) =>
+                                updateStop(selectedLayer.id, selectedStopIndex, {
+                                  color: e.target.value,
+                                })
+                              }
+                              className="flex-1 p-1.5 border border-gray-300 rounded text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="e.g. #ff0000, rgba(255,0,0,0.5)"
+                            />
+                          </div>
+                          
+                          {/* Alpha slider for rgba colors */}
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-gray-600 w-12">Alpha:</label>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={getColorAlpha(selectedLayer.stops[selectedStopIndex].color)}
+                              onChange={(e) => {
+                                const currentColor = selectedLayer.stops[selectedStopIndex].color;
+                                const alpha = parseFloat(e.target.value);
+                                
+                                // Convert to rgba format
+                                const hex = colorToHex(currentColor);
+                                const r = parseInt(hex.slice(1, 3), 16);
+                                const g = parseInt(hex.slice(3, 5), 16);
+                                const b = parseInt(hex.slice(5, 7), 16);
+                                
+                                const newColor = alpha === 1 ? hex : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                                updateStop(selectedLayer.id, selectedStopIndex, {
+                                  color: newColor,
+                                });
+                              }}
+                              className="flex-1 h-1"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={Math.round(getColorAlpha(selectedLayer.stops[selectedStopIndex].color) * 100)}
+                              onChange={(e) => {
+                                const currentColor = selectedLayer.stops[selectedStopIndex].color;
+                                const alpha = Math.max(0, Math.min(100, Number(e.target.value) || 0)) / 100;
+                                
+                                // Convert to rgba format
+                                const hex = colorToHex(currentColor);
+                                const r = parseInt(hex.slice(1, 3), 16);
+                                const g = parseInt(hex.slice(3, 5), 16);
+                                const b = parseInt(hex.slice(5, 7), 16);
+                                
+                                const newColor = alpha === 1 ? hex : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                                updateStop(selectedLayer.id, selectedStopIndex, {
+                                  color: newColor,
+                                });
+                              }}
+                              className="w-12 px-1 py-0.5 text-xs border border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-gray-500">%</span>
+                          </div>
                         </div>
                       </div>
                       <div>
