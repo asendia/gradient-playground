@@ -30,20 +30,20 @@ function convertToRgba(color: string, opacity: number): string {
   // If already rgba, extract rgb part and apply new opacity
   const rgbaMatch = color.match(/rgba?\(([^)]+)\)/);
   if (rgbaMatch) {
-    const values = rgbaMatch[1].split(',').map(v => v.trim());
+    const values = rgbaMatch[1].split(",").map((v) => v.trim());
     if (values.length >= 3) {
       const r = values[0];
-      const g = values[1]; 
+      const g = values[1];
       const b = values[2];
       return `rgba(${r}, ${g}, ${b}, ${opacity})`;
     }
   }
-  
+
   // Handle hex colors
-  if (color.startsWith('#')) {
+  if (color.startsWith("#")) {
     const hex = color.slice(1);
     let r: number, g: number, b: number;
-    
+
     if (hex.length === 3) {
       r = parseInt(hex[0] + hex[0], 16);
       g = parseInt(hex[1] + hex[1], 16);
@@ -55,10 +55,10 @@ function convertToRgba(color: string, opacity: number): string {
     } else {
       return color; // fallback for invalid hex
     }
-    
+
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
   }
-  
+
   // For other color formats, return as-is (fallback)
   return color;
 }
@@ -66,31 +66,33 @@ function convertToRgba(color: string, opacity: number): string {
 // Helper function to convert any color format to hex for color picker
 function colorToHex(color: string): string {
   // If already hex, return as-is
-  if (color.startsWith('#')) {
+  if (color.startsWith("#")) {
     return color;
   }
-  
+
   // Handle rgba/rgb colors
   const rgbaMatch = color.match(/rgba?\(([^)]+)\)/);
   if (rgbaMatch) {
-    const values = rgbaMatch[1].split(',').map(v => parseInt(v.trim()));
+    const values = rgbaMatch[1].split(",").map((v) => parseInt(v.trim()));
     if (values.length >= 3) {
       const r = Math.max(0, Math.min(255, values[0]));
-      const g = Math.max(0, Math.min(255, values[1])); 
+      const g = Math.max(0, Math.min(255, values[1]));
       const b = Math.max(0, Math.min(255, values[2]));
-      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      return `#${r.toString(16).padStart(2, "0")}${g
+        .toString(16)
+        .padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
     }
   }
-  
+
   // Fallback: return black
-  return '#000000';
+  return "#000000";
 }
 
 // Helper function to extract alpha from rgba color
 function getColorAlpha(color: string): number {
   const rgbaMatch = color.match(/rgba\(([^)]+)\)/);
   if (rgbaMatch) {
-    const values = rgbaMatch[1].split(',').map(v => v.trim());
+    const values = rgbaMatch[1].split(",").map((v) => v.trim());
     if (values.length >= 4) {
       return parseFloat(values[3]) || 1;
     }
@@ -150,7 +152,7 @@ function decodeStateFromHash(hash?: string): AppState | null {
   try {
     const hashValue = hash || window.location.hash;
     // Remove the # from the hash
-    const stateParam = hashValue.replace('#', '');
+    const stateParam = hashValue.replace("#", "");
     if (!stateParam) return null;
 
     const decoded = atob(stateParam);
@@ -188,7 +190,7 @@ export default function GradientPlayground() {
   const [previewContainerHeight, setPreviewContainerHeight] = useState(0);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFromHashRef = useRef(false);
-  
+
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Initialize from hash on first load only
@@ -214,13 +216,13 @@ export default function GradientPlayground() {
       if (hashState) {
         // Set flag to prevent hash update loop
         isUpdatingFromHashRef.current = true;
-        
+
         // Update state to match hash without triggering another hash update
         setLayers(hashState.layers);
         setPreviewW(hashState.previewW);
         setPreviewH(hashState.previewH);
         setSelectedLayerId(hashState.selectedLayerId);
-        
+
         // Reset flag after state updates
         setTimeout(() => {
           isUpdatingFromHashRef.current = false;
@@ -228,10 +230,10 @@ export default function GradientPlayground() {
       }
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    
+    window.addEventListener("hashchange", handleHashChange);
+
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener("hashchange", handleHashChange);
     };
   }, [isInitialized]);
 
@@ -242,15 +244,15 @@ export default function GradientPlayground() {
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
-      
+
       // Debounce hash updates to prevent too many history entries
       updateTimeoutRef.current = setTimeout(() => {
         const encoded = encodeStateToHash(state);
-        
+
         // Use history.pushState to create history entries for undo/redo
         // This allows back/forward navigation while keeping the hash
         const newUrl = `${window.location.pathname}${window.location.search}#${encoded}`;
-        history.pushState(null, '', newUrl);
+        history.pushState(null, "", newUrl);
       }, 300); // 300ms debounce for better responsiveness
     } catch (e) {
       console.error("Failed to update hash:", e);
@@ -277,22 +279,30 @@ export default function GradientPlayground() {
     };
 
     updateHashWithState(state);
-  }, [layers, previewW, previewH, selectedLayerId, isInitialized, updateHashWithState]);
+  }, [
+    layers,
+    previewW,
+    previewH,
+    selectedLayerId,
+    isInitialized,
+    updateHashWithState,
+  ]);
 
   // Measure preview container height
   useEffect(() => {
     const measureHeight = () => {
       if (previewContainerRef.current) {
-        const height = previewContainerRef.current.getBoundingClientRect().height;
+        const height =
+          previewContainerRef.current.getBoundingClientRect().height;
         setPreviewContainerHeight(height);
       }
     };
 
     measureHeight();
-    window.addEventListener('resize', measureHeight);
+    window.addEventListener("resize", measureHeight);
 
     return () => {
-      window.removeEventListener('resize', measureHeight);
+      window.removeEventListener("resize", measureHeight);
       // Cleanup timeout on unmount
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
@@ -304,11 +314,11 @@ export default function GradientPlayground() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check for undo/redo shortcuts
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+
       if (isMac) {
         // Mac: Cmd+Z for undo, Cmd+Shift+Z for redo
-        if (e.metaKey && e.key === 'z') {
+        if (e.metaKey && e.key === "z") {
           e.preventDefault();
           if (e.shiftKey) {
             window.history.forward();
@@ -317,38 +327,35 @@ export default function GradientPlayground() {
           }
         }
         // Mac: Cmd+← for back, Cmd+→ for forward
-        else if (e.metaKey && e.key === 'ArrowLeft') {
+        else if (e.metaKey && e.key === "ArrowLeft") {
           e.preventDefault();
           window.history.back();
-        }
-        else if (e.metaKey && e.key === 'ArrowRight') {
+        } else if (e.metaKey && e.key === "ArrowRight") {
           e.preventDefault();
           window.history.forward();
         }
       } else {
         // Windows/Linux: Ctrl+Z for undo, Ctrl+Y for redo
-        if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+        if (e.ctrlKey && e.key === "z" && !e.shiftKey) {
           e.preventDefault();
           window.history.back();
-        }
-        else if (e.ctrlKey && e.key === 'y') {
+        } else if (e.ctrlKey && e.key === "y") {
           e.preventDefault();
           window.history.forward();
         }
         // Windows/Linux: Alt+← for back, Alt+→ for forward
-        else if (e.altKey && e.key === 'ArrowLeft') {
+        else if (e.altKey && e.key === "ArrowLeft") {
           e.preventDefault();
           window.history.back();
-        }
-        else if (e.altKey && e.key === 'ArrowRight') {
+        } else if (e.altKey && e.key === "ArrowRight") {
           e.preventDefault();
           window.history.forward();
         }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   function generateCss() {
@@ -358,7 +365,7 @@ export default function GradientPlayground() {
       .map((L) => {
         const fromPart = L.from != null ? `from ${L.from}deg ` : "";
         const atPart = L.at ? `at ${L.at.x}% ${L.at.y}%` : "";
-        
+
         // Convert colors to rgba if opacity is less than 1
         const stopList = L.stops
           .map((s) => {
@@ -369,7 +376,7 @@ export default function GradientPlayground() {
             return `${s.color} ${formatNumber(s.pos)}deg`;
           })
           .join(", ");
-        
+
         return `${L.type}-gradient(${fromPart}${atPart}, ${stopList})`;
       })
       .join(",\n");
@@ -384,20 +391,23 @@ export default function GradientPlayground() {
       .map((L) => {
         const fromPart = L.from != null ? `from_${L.from}deg_` : "";
         const atPart = L.at ? `at_${L.at.x}%_${L.at.y}%` : "";
-        
+
         // Convert colors to rgba if opacity is less than 1
         const stopList = L.stops
           .map((s) => {
             if (L.opacity < 1) {
               const color = convertToRgba(s.color, L.opacity);
-              // Escape special characters for Tailwind
-              const escapedColor = color.replace(/[(),\s]/g, '_');
-              return `${escapedColor}_${formatNumber(s.pos)}deg`;
+              // Remove spaces from rgba values for Tailwind format
+              const cleanColor = color.replace(/\s+/g, "");
+              return `${cleanColor}_${formatNumber(s.pos)}deg`;
             }
             return `${s.color}_${formatNumber(s.pos)}deg`;
           })
           .join(",_");
-        return `${L.type}-gradient(${fromPart}${atPart},_${stopList})`;
+
+        const gradientParams =
+          fromPart + (atPart ? `${atPart},_` : "") + stopList;
+        return `${L.type}-gradient(${gradientParams})`;
       })
       .join(",");
 
@@ -483,9 +493,9 @@ export default function GradientPlayground() {
   }
 
   function moveLayerUp(id: number) {
-    const currentIndex = layers.findIndex(l => l.id === id);
+    const currentIndex = layers.findIndex((l) => l.id === id);
     if (currentIndex <= 0) return; // Already at top or not found
-    
+
     const newLayers = [...layers];
     const temp = newLayers[currentIndex];
     newLayers[currentIndex] = newLayers[currentIndex - 1];
@@ -494,9 +504,9 @@ export default function GradientPlayground() {
   }
 
   function moveLayerDown(id: number) {
-    const currentIndex = layers.findIndex(l => l.id === id);
+    const currentIndex = layers.findIndex((l) => l.id === id);
     if (currentIndex >= layers.length - 1 || currentIndex === -1) return; // Already at bottom or not found
-    
+
     const newLayers = [...layers];
     const temp = newLayers[currentIndex];
     newLayers[currentIndex] = newLayers[currentIndex + 1];
@@ -560,7 +570,7 @@ export default function GradientPlayground() {
           }
         }
 
-        stops.push({ color, pos }, );
+        stops.push({ color, pos });
         currentPos = pos + 45; // Default increment for next stop if no position specified
       }
 
@@ -633,7 +643,6 @@ export default function GradientPlayground() {
   async function copyToClipboard() {
     try {
       await navigator.clipboard.writeText(cssText);
-      alert("CSS copied to clipboard");
     } catch (e) {
       console.error(e);
       alert("Copy failed — please select & copy manually.");
@@ -643,7 +652,6 @@ export default function GradientPlayground() {
   async function copyTailwindToClipboard() {
     try {
       await navigator.clipboard.writeText(tailwindText);
-      alert("Tailwind CSS copied to clipboard");
     } catch (e) {
       console.error(e);
       alert("Copy failed — please select & copy manually.");
@@ -669,10 +677,10 @@ export default function GradientPlayground() {
       // Add new stop at clicked position
       const newStop = { color: "#ffffff", pos: newPos };
       const newStops = [...layer.stops, newStop];
-      
+
       // Update the layer with the new stop
       updateLayer(layer.id, { stops: newStops });
-      
+
       // Focus the newly created stop
       setSelectedStopIndex(newStops.length - 1);
     };
@@ -773,7 +781,8 @@ export default function GradientPlayground() {
               CSS Gradient Playground
             </h1>
             <div className="text-xs text-gray-500 hidden sm:block">
-              Undo/Redo: Cmd+Z/Cmd+Shift+Z (Mac) or Ctrl+Z/Ctrl+Y (Windows) • Browser back/forward also works
+              Undo/Redo: Cmd+Z/Cmd+Shift+Z (Mac) or Ctrl+Z/Ctrl+Y (Windows) •
+              Browser back/forward also works
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -809,7 +818,10 @@ export default function GradientPlayground() {
 
       <div className="px-4 pt-4 max-w-7xl mx-auto">
         {/* Sticky Preview Section */}
-        <div ref={previewContainerRef} className="bg-white rounded-lg shadow sticky top-0 z-50 mb-4">
+        <div
+          ref={previewContainerRef}
+          className="bg-white rounded-lg shadow sticky top-0 z-50 mb-4"
+        >
           <div className="p-3">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-medium text-gray-700">Preview</h2>
@@ -840,7 +852,7 @@ export default function GradientPlayground() {
             <div className="bg-gray-100 p-3 rounded-lg relative min-h-72 flex items-center justify-center">
               {/* Large gradient overlay when dragging stops */}
               {isDraggingStop && (
-                <div 
+                <div
                   className="absolute inset-0 pointer-events-none z-10 rounded-lg"
                   style={{
                     background: layers
@@ -848,37 +860,46 @@ export default function GradientPlayground() {
                       .map((L) => {
                         const fromPart =
                           L.from != null ? `from ${L.from}deg ` : "";
-                        
+
                         // Calculate the overlay container dimensions (full container minus padding)
-                        const overlayContainer = document.querySelector('.bg-gray-100.p-3.rounded-lg');
-                        
+                        const overlayContainer = document.querySelector(
+                          ".bg-gray-100.p-3.rounded-lg"
+                        );
+
                         let atPart = "at 50% 50%"; // fallback
-                        
+
                         if (overlayContainer && L.at) {
-                          const overlayRect = overlayContainer.getBoundingClientRect();
-                          
+                          const overlayRect =
+                            overlayContainer.getBoundingClientRect();
+
                           const overlayWidth = overlayRect.width;
                           const overlayHeight = overlayRect.height;
-                          
+
                           // Calculate the relative position of the gradient center
                           // The preview is centered within the overlay container
                           const previewX = (overlayWidth - previewW) / 2;
                           const previewY = (overlayHeight - previewH) / 2;
-                          
+
                           // Calculate where the gradient center should be in overlay coordinates
-                          const gradientCenterX = previewX + (L.at.x / 100) * previewW;
-                          const gradientCenterY = previewY + (L.at.y / 100) * previewH;
-                          
+                          const gradientCenterX =
+                            previewX + (L.at.x / 100) * previewW;
+                          const gradientCenterY =
+                            previewY + (L.at.y / 100) * previewH;
+
                           // Convert to percentages of the overlay container
-                          const overlayAtX = (gradientCenterX / overlayWidth) * 100;
-                          const overlayAtY = (gradientCenterY / overlayHeight) * 100;
-                          
-                          atPart = `at ${overlayAtX.toFixed(2)}% ${overlayAtY.toFixed(2)}%`;
+                          const overlayAtX =
+                            (gradientCenterX / overlayWidth) * 100;
+                          const overlayAtY =
+                            (gradientCenterY / overlayHeight) * 100;
+
+                          atPart = `at ${overlayAtX.toFixed(
+                            2
+                          )}% ${overlayAtY.toFixed(2)}%`;
                         } else if (L.at) {
                           // Fallback: use the original at position if we can't calculate
                           atPart = `at ${L.at.x}% ${L.at.y}%`;
                         }
-                        
+
                         const stopList = L.stops
                           .map((s) => {
                             if (L.opacity < 1) {
@@ -895,7 +916,7 @@ export default function GradientPlayground() {
                   }}
                 />
               )}
-              
+
               <div
                 className="rounded-lg shadow-inner border border-gray-200 overflow-hidden relative z-20"
                 style={{ width: previewW, height: previewH }}
@@ -929,12 +950,13 @@ export default function GradientPlayground() {
         </div>
 
         {/* Main Content - Single Column */}
-        <div 
+        <div
           className="space-y-4"
           style={{
-            paddingBottom: previewContainerHeight > 0 
-              ? `calc(100dvh - ${previewContainerHeight + 170}px)` 
-              : '0px'
+            paddingBottom:
+              previewContainerHeight > 0
+                ? `calc(100dvh - ${previewContainerHeight + 170}px)`
+                : "0px",
           }}
         >
           {/* Import & Export Section */}
@@ -1099,10 +1121,11 @@ export default function GradientPlayground() {
                       Gradient
                     </div>
                     <div className="text-xs text-gray-500">
-                      {layer.stops.length} stops • {Math.round(layer.opacity * 100)}% opacity
+                      {layer.stops.length} stops •{" "}
+                      {Math.round(layer.opacity * 100)}% opacity
                     </div>
                   </div>
-                  
+
                   {/* Layer Controls */}
                   <div className="flex items-center gap-1">
                     {/* Opacity Control */}
@@ -1115,7 +1138,9 @@ export default function GradientPlayground() {
                         value={layer.opacity}
                         onChange={(e) => {
                           e.stopPropagation();
-                          updateLayer(layer.id, { opacity: parseFloat(e.target.value) });
+                          updateLayer(layer.id, {
+                            opacity: parseFloat(e.target.value),
+                          });
                         }}
                         className="w-12 h-1"
                         title={`Opacity: ${Math.round(layer.opacity * 100)}%`}
@@ -1127,7 +1152,10 @@ export default function GradientPlayground() {
                         value={Math.round(layer.opacity * 100)}
                         onChange={(e) => {
                           e.stopPropagation();
-                          const value = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                          const value = Math.max(
+                            0,
+                            Math.min(100, Number(e.target.value) || 0)
+                          );
                           updateLayer(layer.id, { opacity: value / 100 });
                         }}
                         className="w-12 px-1 py-0.5 text-xs border border-gray-300 rounded"
@@ -1135,7 +1163,7 @@ export default function GradientPlayground() {
                       />
                       <span className="text-xs text-gray-500">%</span>
                     </div>
-                    
+
                     {/* Reorder Buttons */}
                     <button
                       onClick={(e) => {
@@ -1146,8 +1174,18 @@ export default function GradientPlayground() {
                       className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                       title="Move up"
                     >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 15l7-7 7 7"
+                        />
                       </svg>
                     </button>
                     <button
@@ -1159,11 +1197,21 @@ export default function GradientPlayground() {
                       className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                       title="Move down"
                     >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
                       </svg>
                     </button>
-                    
+
                     {/* Delete Button */}
                     <button
                       onClick={(e) => {
@@ -1288,7 +1336,9 @@ export default function GradientPlayground() {
                       value={Math.round(selectedLayer.opacity * 100)}
                       onChange={(e) =>
                         updateLayer(selectedLayer.id, {
-                          opacity: Math.max(0, Math.min(100, Number(e.target.value))) / 100,
+                          opacity:
+                            Math.max(0, Math.min(100, Number(e.target.value))) /
+                            100,
                         })
                       }
                       className="w-full p-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1327,11 +1377,14 @@ export default function GradientPlayground() {
                           <div className="flex gap-2">
                             <input
                               type="color"
-                              value={colorToHex(selectedLayer.stops[selectedStopIndex].color)}
+                              value={colorToHex(
+                                selectedLayer.stops[selectedStopIndex].color
+                              )}
                               onChange={(e) => {
-                                const currentColor = selectedLayer.stops[selectedStopIndex].color;
+                                const currentColor =
+                                  selectedLayer.stops[selectedStopIndex].color;
                                 const alpha = getColorAlpha(currentColor);
-                                
+
                                 // If alpha is less than 1, convert to rgba
                                 if (alpha < 1) {
                                   const hex = e.target.value;
@@ -1339,53 +1392,79 @@ export default function GradientPlayground() {
                                   const g = parseInt(hex.slice(3, 5), 16);
                                   const b = parseInt(hex.slice(5, 7), 16);
                                   const newColor = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-                                  updateStop(selectedLayer.id, selectedStopIndex, {
-                                    color: newColor,
-                                  });
+                                  updateStop(
+                                    selectedLayer.id,
+                                    selectedStopIndex,
+                                    {
+                                      color: newColor,
+                                    }
+                                  );
                                 } else {
-                                  updateStop(selectedLayer.id, selectedStopIndex, {
-                                    color: e.target.value,
-                                  });
+                                  updateStop(
+                                    selectedLayer.id,
+                                    selectedStopIndex,
+                                    {
+                                      color: e.target.value,
+                                    }
+                                  );
                                 }
                               }}
                               className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
                             />
                             <input
                               type="text"
-                              value={selectedLayer.stops[selectedStopIndex].color}
+                              value={
+                                selectedLayer.stops[selectedStopIndex].color
+                              }
                               onChange={(e) =>
-                                updateStop(selectedLayer.id, selectedStopIndex, {
-                                  color: e.target.value,
-                                })
+                                updateStop(
+                                  selectedLayer.id,
+                                  selectedStopIndex,
+                                  {
+                                    color: e.target.value,
+                                  }
+                                )
                               }
                               className="flex-1 p-1.5 border border-gray-300 rounded text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               placeholder="e.g. #ff0000, rgba(255,0,0,0.5)"
                             />
                           </div>
-                          
+
                           {/* Alpha slider for rgba colors */}
                           <div className="flex items-center gap-2">
-                            <label className="text-xs text-gray-600 w-12">Alpha:</label>
+                            <label className="text-xs text-gray-600 w-12">
+                              Alpha:
+                            </label>
                             <input
                               type="range"
                               min="0"
                               max="1"
                               step="0.01"
-                              value={getColorAlpha(selectedLayer.stops[selectedStopIndex].color)}
+                              value={getColorAlpha(
+                                selectedLayer.stops[selectedStopIndex].color
+                              )}
                               onChange={(e) => {
-                                const currentColor = selectedLayer.stops[selectedStopIndex].color;
+                                const currentColor =
+                                  selectedLayer.stops[selectedStopIndex].color;
                                 const alpha = parseFloat(e.target.value);
-                                
+
                                 // Convert to rgba format
                                 const hex = colorToHex(currentColor);
                                 const r = parseInt(hex.slice(1, 3), 16);
                                 const g = parseInt(hex.slice(3, 5), 16);
                                 const b = parseInt(hex.slice(5, 7), 16);
-                                
-                                const newColor = alpha === 1 ? hex : `rgba(${r}, ${g}, ${b}, ${alpha})`;
-                                updateStop(selectedLayer.id, selectedStopIndex, {
-                                  color: newColor,
-                                });
+
+                                const newColor =
+                                  alpha === 1
+                                    ? hex
+                                    : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                                updateStop(
+                                  selectedLayer.id,
+                                  selectedStopIndex,
+                                  {
+                                    color: newColor,
+                                  }
+                                );
                               }}
                               className="flex-1 h-1"
                             />
@@ -1393,21 +1472,37 @@ export default function GradientPlayground() {
                               type="number"
                               min="0"
                               max="100"
-                              value={Math.round(getColorAlpha(selectedLayer.stops[selectedStopIndex].color) * 100)}
+                              value={Math.round(
+                                getColorAlpha(
+                                  selectedLayer.stops[selectedStopIndex].color
+                                ) * 100
+                              )}
                               onChange={(e) => {
-                                const currentColor = selectedLayer.stops[selectedStopIndex].color;
-                                const alpha = Math.max(0, Math.min(100, Number(e.target.value) || 0)) / 100;
-                                
+                                const currentColor =
+                                  selectedLayer.stops[selectedStopIndex].color;
+                                const alpha =
+                                  Math.max(
+                                    0,
+                                    Math.min(100, Number(e.target.value) || 0)
+                                  ) / 100;
+
                                 // Convert to rgba format
                                 const hex = colorToHex(currentColor);
                                 const r = parseInt(hex.slice(1, 3), 16);
                                 const g = parseInt(hex.slice(3, 5), 16);
                                 const b = parseInt(hex.slice(5, 7), 16);
-                                
-                                const newColor = alpha === 1 ? hex : `rgba(${r}, ${g}, ${b}, ${alpha})`;
-                                updateStop(selectedLayer.id, selectedStopIndex, {
-                                  color: newColor,
-                                });
+
+                                const newColor =
+                                  alpha === 1
+                                    ? hex
+                                    : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                                updateStop(
+                                  selectedLayer.id,
+                                  selectedStopIndex,
+                                  {
+                                    color: newColor,
+                                  }
+                                );
                               }}
                               className="w-12 px-1 py-0.5 text-xs border border-gray-300 rounded"
                             />
